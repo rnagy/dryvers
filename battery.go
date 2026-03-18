@@ -1,6 +1,8 @@
 package dryvers
 
-import "os"
+import (
+    "github.com/distatus/battery"
+)
 
 type Battery struct{}
 
@@ -15,15 +17,36 @@ func (b *Battery) IsLow() (bool, error) {
 	return v < 0.1, nil
 }
 
-func pickChargeOrEnergy() (string, string) {
-	_, err := os.Stat("/sys/class/power_supply/BAT0/charge_now")
-	if err != nil {
-		return "/sys/class/power_supply/BAT0/energy_now", "/sys/class/power_supply/BAT0/energy_full"
-	}
-	return "/sys/class/power_supply/BAT0/charge_now", "/sys/class/power_supply/BAT0/charge_full"
-}
-
 // NewBattery creates a new instance of the batter driver.
 func NewBattery() *Battery {
 	return &Battery{}
+}
+
+func (b *Battery) PluggedIn() (bool, error) {
+	batteries, err := battery.GetAll()
+	if err != nil {
+		return true, err // assume power if no battery info
+	}
+	for _, battery := range batteries {
+		// if any battery is discharging, we are not plugged in
+		if (battery.State.String() == "Discharging") {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+// Get returns the current battery level (between 0 and 1) or
+// an error if there was a problem.
+func (b *Battery) Get() (float64, error) {
+	batteries, err := battery.GetAll()
+	var ctotal, ftotal float64
+	if err != nil {
+		return 0, nil
+	}
+	for _, battery := range batteries {
+		ctotal += battery.Current
+		ftotal += battery.Full
+	}
+	return ctotal / ftotal, nil
 }
